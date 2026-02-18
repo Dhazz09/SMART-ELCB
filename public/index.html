@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart ELCB Dashboard</title>
+
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+
+<style>
+/* ── Design System ──────────────────────────────────────────── */
+:root {
+  --bg:         #080b0f;
+  --panel:      #0d1117;
+  --border:     #1c2a3a;
+  --accent:     #00e5ff;
+  --accent2:    #76ff03;
+  --danger:     #ff1744;
+  --warn:       #ff9100;
+  --text:       #c9d6df;
+  --muted:      #4a5568;
+  --mono:       'Share Tech Mono', monospace;
+  --sans:       'Barlow Condensed', sans-serif;
+  --glow-cyan:  0 0 16px rgba(0,229,255,.35), 0 0 40px rgba(0,229,255,.1);
+  --glow-green: 0 0 16px rgba(118,255,3,.35);
+  --glow-red:   0 0 20px rgba(255,23,68,.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanlines overlay */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,.08) 2px, rgba(0,0,0,.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Layout ──────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13,17,23,.92);
+  backdrop-filter: blur(8px);
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo {
+  display: flex; align-items: center; gap: 14px;
+}
+.logo-icon {
+  width: 40px; height: 40px;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  box-shadow: var(--glow-cyan);
+}
+.logo h1 {
+  font-size: 1.3rem; font-weight: 700; letter-spacing: 2px;
+  color: #fff; text-transform: uppercase;
+}
+.logo span { font-size: .7rem; letter-spacing: 4px; color: var(--muted); display: block; }
+
+.header-right { display: flex; align-items: center; gap: 16px; }
+
+.status-pill {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 20px;
+  border: 1px solid var(--border);
+  font-size: .75rem; letter-spacing: 2px; text-transform: uppercase;
+  font-family: var(--mono);
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted);
+  transition: background .3s;
+}
+.status-pill.connected .status-dot { background: var(--accent2); box-shadow: var(--glow-green); }
+.status-pill.fault .status-dot     { background: var(--danger);  box-shadow: var(--glow-red); animation: pulse 0.6s infinite; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+main {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 16px;
+  padding: 20px 28px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* ── Panel base ───────────────────────────────────────────────── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+}
+.panel::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .4;
+}
+.panel-title {
+  font-size: .65rem; letter-spacing: 4px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 14px; font-family: var(--mono);
+}
+
+/* ── Metric Cards ─────────────────────────────────────────────── */
+.metric-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.metric-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 22px;
+  position: relative;
+  overflow: hidden;
+}
+.metric-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at top left, rgba(0,229,255,.04), transparent 70%);
+}
+.metric-card .label {
+  font-size: .6rem; letter-spacing: 4px; text-transform: uppercase;
+  color: var(--muted); font-family: var(--mono); margin-bottom: 10px;
+}
+.metric-card .value {
+  font-family: var(--mono); font-size: 2.4rem; font-weight: 400;
+  color: var(--accent); line-height: 1;
+  text-shadow: var(--glow-cyan);
+}
+.metric-card .unit {
+  font-size: .9rem; color: var(--muted); margin-left: 4px;
+}
+.metric-card.danger-card .value { color: var(--danger); text-shadow: var(--glow-red); }
+.metric-card.warn-card   .value { color: var(--warn); }
+.metric-card .sub { font-size: .7rem; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+
+/* ── LCD Replica ──────────────────────────────────────────────── */
+.lcd-panel {
+  grid-column: 1 / 2;
+}
+.lcd-screen {
+  background: #0a1a0a;
+  border: 3px solid #1a3a1a;
+  border-radius: 6px;
+  padding: 16px 20px;
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  line-height: 2;
+  color: #76ff03;
+  text-shadow: 0 0 8px rgba(118,255,3,.5);
+  min-height: 80px;
+  letter-spacing: 1px;
+  box-shadow: inset 0 0 20px rgba(0,0,0,.5);
+  position: relative;
+}
+.lcd-screen .lcd-row { display: block; white-space: pre; }
+/* LCD cursor blink */
+.lcd-cursor { animation: blink 1s step-end infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* ── Alarm Banner ─────────────────────────────────────────────── */
+.alarm-banner {
+  grid-column: 2 / 4;
+  display: flex; align-items: center;
+  gap: 20px;
+  padding: 20px 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  transition: all .3s;
+  position: relative;
+  overflow: hidden;
+}
+.alarm-banner.active {
+  border-color: var(--danger);
+  background: rgba(255,23,68,.05);
+  animation: alarm-flash 1s ease-in-out infinite;
+}
+@keyframes alarm-flash {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,23,68,0); }
+  50%      { box-shadow: 0 0 30px 4px rgba(255,23,68,.3); }
+}
+.alarm-icon { font-size: 2.5rem; }
+.alarm-text { flex: 1; }
+.alarm-title { font-size: 1.3rem; font-weight: 700; letter-spacing: 2px; }
+.alarm-title.ok    { color: var(--accent2); }
+.alarm-title.fault { color: var(--danger); }
+.alarm-detail { font-size: .8rem; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+
+.reset-btn {
+  padding: 12px 28px;
+  background: transparent;
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--sans); font-size: .85rem; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+}
+.reset-btn:hover { background: var(--accent); color: #000; box-shadow: var(--glow-cyan); }
+.reset-btn:disabled { opacity: .3; cursor: not-allowed; }
+.reset-btn.danger { border-color: var(--danger); color: var(--danger); }
+.reset-btn.danger:hover { background: var(--danger); color: #fff; box-shadow: var(--glow-red); }
+
+/* ── Charts ───────────────────────────────────────────────────── */
+.chart-panel { grid-column: 1 / 3; }
+.chart-panel-sm { grid-column: 3 / 4; }
+.chart-wrap { position: relative; height: 220px; }
+
+/* ── Event Log ────────────────────────────────────────────────── */
+.log-panel { grid-column: 1 / 4; }
+.log-list {
+  height: 160px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: .78rem;
+}
+.log-list::-webkit-scrollbar { width: 4px; }
+.log-list::-webkit-scrollbar-track { background: transparent; }
+.log-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.log-entry {
+  display: flex; gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+  line-height: 1.4;
+}
+.log-entry .ts   { color: var(--muted); min-width: 90px; }
+.log-entry .evt  { color: var(--text); flex: 1; }
+.log-entry.fault .evt { color: var(--danger); }
+.log-entry.ok    .evt { color: var(--accent2); }
+.log-entry.info  .evt { color: var(--accent); }
+
+/* ── GitHub Box ───────────────────────────────────────────────── */
+.github-panel { grid-column: 3 / 4; display: flex; flex-direction: column; }
+.github-link {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text);
+  background: rgba(255,255,255,.02);
+  transition: all .2s;
+  margin-top: 8px;
+}
+.github-link:hover {
+  border-color: var(--accent);
+  background: rgba(0,229,255,.04);
+  color: var(--accent);
+  box-shadow: var(--glow-cyan);
+}
+.github-link svg { flex-shrink: 0; }
+.github-link-info { flex: 1; }
+.github-link-info .gh-title { font-size: .95rem; font-weight: 600; letter-spacing: 1px; }
+.github-link-info .gh-sub   { font-size: .7rem; color: var(--muted); font-family: var(--mono); }
+.github-link .ext-icon { color: var(--muted); font-size: .9rem; }
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  main { grid-template-columns: 1fr 1fr; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .alarm-banner { grid-column: 1 / -1; }
+  .chart-panel  { grid-column: 1 / -1; }
+  .chart-panel-sm { grid-column: 1 / -1; }
+  .log-panel    { grid-column: 1 / -1; }
+  .github-panel { grid-column: 1 / -1; }
+  .lcd-panel    { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  header { flex-direction: column; gap: 10px; }
+  main { padding: 12px; gap: 12px; }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .metric-card .value { font-size: 1.8rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <h1>Smart ELCB</h1>
+      <span>Earth Leakage Circuit Breaker — Dashboard</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill" id="serialStatus">
+      <div class="status-dot"></div>
+      <span id="serialLabel">Disconnected</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:.7rem;color:var(--muted)" id="clockDisplay">--:--:--</div>
+  </div>
+</header>
+
+<!-- ── Main Grid ───────────────────────────────────────────────── -->
+<main>
+
+  <!-- Metric Cards -->
+  <div class="metric-grid">
+    <div class="metric-card">
+      <div class="label">Battery Voltage</div>
+      <div class="value" id="voltVal">--.-<span class="unit">V</span></div>
+      <div class="sub" id="voltSub">Awaiting data</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">Load Current</div>
+      <div class="value" id="currVal">-.---<span class="unit">A</span></div>
+      <div class="sub" id="currSub">Awaiting data</div>
+    </div>
+    <div class="metric-card warn-card" id="tripCard">
+      <div class="label">Trip Current</div>
+      <div class="value" id="tripVal">-.-<span class="unit">A</span></div>
+      <div class="sub" id="tripSub">No trip recorded</div>
+    </div>
+    <div class="metric-card">
+      <div class="label">System Uptime</div>
+      <div class="value" id="uptimeVal" style="font-size:1.8rem">00:00:00</div>
+      <div class="sub" id="systemStatus">Initialising</div>
+    </div>
+  </div>
+
+  <!-- LCD Replica -->
+  <div class="panel lcd-panel">
+    <div class="panel-title">LCD Display — Live</div>
+    <div class="lcd-screen" id="lcdScreen">
+      <span class="lcd-row" id="lcdRow0">  Smart ELCB v1.0</span>
+      <span class="lcd-row" id="lcdRow1">   Calibrating...</span>
+    </div>
+  </div>
+
+  <!-- Alarm Banner -->
+  <div class="alarm-banner" id="alarmBanner">
+    <div class="alarm-icon" id="alarmIcon">🟢</div>
+    <div class="alarm-text">
+      <div class="alarm-title ok" id="alarmTitle">SYSTEM NORMAL</div>
+      <div class="alarm-detail" id="alarmDetail">All systems operational. Relay energised. Load powered.</div>
+    </div>
+    <button class="reset-btn" id="resetBtn" onclick="sendReset()">⟳ Reset System</button>
+  </div>
+
+  <!-- Voltage Chart -->
+  <div class="panel chart-panel">
+    <div class="panel-title">Voltage Over Time (V)</div>
+    <div class="chart-wrap">
+      <canvas id="voltChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Current Chart (side) -->
+  <div class="panel chart-panel-sm">
+    <div class="panel-title">Current Over Time (A)</div>
+    <div class="chart-wrap">
+      <canvas id="currChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="panel log-panel">
+    <div class="panel-title">Event Log</div>
+    <div class="log-list" id="logList"></div>
+  </div>
+
+  <!-- GitHub Box -->
+  <div class="panel github-panel">
+    <div class="panel-title">Project Repository</div>
+    <a class="github-link" href="https://github.com/YOUR_USERNAME/smart-elcb" target="_blank" rel="noopener" id="githubLink">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57
+          0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695
+          -.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99
+          .105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225
+          -.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405
+          c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225
+          0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3
+          0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+      </svg>
+      <div class="github-link-info">
+        <div class="gh-title">Smart ELCB Project</div>
+        <div class="gh-sub" id="githubUser">github.com/YOUR_USERNAME</div>
+      </div>
+      <span class="ext-icon">↗</span>
+    </a>
+
+    <!-- Edit GitHub URL -->
+    <div style="margin-top:14px">
+      <div class="panel-title" style="margin-bottom:8px">Edit Repository URL</div>
+      <input id="githubInput"
+        type="text"
+        value="https://github.com/YOUR_USERNAME/smart-elcb"
+        style="width:100%;background:#060a0e;border:1px solid var(--border);color:var(--text);
+               padding:8px 12px;border-radius:4px;font-family:var(--mono);font-size:.78rem;"
+        placeholder="https://github.com/user/repo"
+      />
+      <button onclick="updateGithub()"
+        style="margin-top:8px;width:100%;padding:8px;background:transparent;
+               border:1px solid var(--accent);color:var(--accent);border-radius:4px;
+               font-family:var(--sans);letter-spacing:2px;font-size:.8rem;cursor:pointer;">
+        UPDATE LINK
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Audio Context for Alarm Beep ──────────────────────────── -->
+<script>
+/* ── State ─────────────────────────────────────────────────────── */
+let isFault       = false;
+let lastVoltage   = 0;
+let lastCurrent   = 0;
+let tripCurrent   = 0;
+let tripTimestamp = null;
+let resetTimestamp= null;
+let serialConnected = false;
+let startTime     = Date.now();
+let alarmInterval = null;
+let audioCtx      = null;
+
+const MAX_POINTS  = 60;   // ~30 seconds of data at 500ms interval
+
+const voltData = { labels: [], datasets: [{ label: 'Voltage (V)', data: [],
+  borderColor: '#00e5ff', backgroundColor: 'rgba(0,229,255,.08)',
+  tension: .4, fill: true, pointRadius: 0, borderWidth: 2 }] };
+
+const currData = { labels: [], datasets: [{ label: 'Current (A)', data: [],
+  borderColor: '#76ff03', backgroundColor: 'rgba(118,255,3,.08)',
+  tension: .4, fill: true, pointRadius: 0, borderWidth: 2 }] };
+
+const chartOpts = (yLabel, color) => ({
+  responsive: true, maintainAspectRatio: false, animation: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: '#4a5568', font: { size: 9, family: "'Share Tech Mono'" }, maxTicksLimit: 8 },
+         grid: { color: 'rgba(255,255,255,.04)' } },
+    y: { ticks: { color: '#4a5568', font: { size: 9, family: "'Share Tech Mono'" } },
+         grid: { color: 'rgba(255,255,255,.04)' },
+         title: { display: true, text: yLabel, color: color, font: { size: 10 } } }
+  }
+});
+
+const voltChart = new Chart(document.getElementById('voltChart'), {
+  type: 'line', data: voltData, options: chartOpts('Volts', '#00e5ff')
+});
+const currChart = new Chart(document.getElementById('currChart'), {
+  type: 'line', data: currData, options: chartOpts('Amps', '#76ff03')
+});
+
+/* ── WebSocket ─────────────────────────────────────────────────── */
+let ws, wsRetryTimer;
+
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}`);
+
+  ws.onopen = () => {
+    clearTimeout(wsRetryTimer);
+    addLog('info', 'WebSocket connected to server');
+  };
+
+  ws.onmessage = ({ data }) => {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return; }
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    addLog('fault', 'WebSocket disconnected — reconnecting in 3s');
+    setSerialStatus(false);
+    wsRetryTimer = setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'serial_status':
+      setSerialStatus(msg.connected);
+      if (!msg.connected && msg.error) addLog('fault', 'Serial: ' + msg.error);
+      break;
+
+    case 'boot':
+      addLog('info', 'Arduino booted — calibrating...');
+      setLCD('  Smart ELCB v1.0', '   Calibrating...');
+      break;
+
+    case 'data':
+      lastVoltage = msg.voltage;
+      lastCurrent = msg.current;
+      if (!msg.fault) {
+        updateMetrics(msg.voltage, msg.current);
+        pushChartPoint(msg.voltage, msg.current);
+        setLCD(
+          `V:${msg.voltage.toFixed(2)}V   `,
+          `I:${msg.current.toFixed(3)}A   `
+        );
+      }
+      break;
+
+    case 'fault':
+      triggerFault(msg.tripCurrent, msg.tripTime);
+      break;
+
+    case 'reset':
+      clearFault();
+      break;
+  }
+}
+
+/* ── Metrics ───────────────────────────────────────────────────── */
+function updateMetrics(v, i) {
+  document.getElementById('voltVal').innerHTML = `${v.toFixed(2)}<span class="unit">V</span>`;
+  document.getElementById('currVal').innerHTML = `${i.toFixed(3)}<span class="unit">A</span>`;
+  document.getElementById('voltSub').textContent = v > 10.5 ? 'Battery OK' : v > 9 ? 'Battery Low' : 'Battery Critical';
+  document.getElementById('currSub').textContent = `Last update: ${nowStr()}`;
+  document.getElementById('systemStatus').textContent = 'Relay ON — Load Powered';
+}
+
+function pushChartPoint(v, i) {
+  const label = nowStr();
+  [voltData, currData].forEach(d => {
+    d.labels.push(label);
+    if (d.labels.length > MAX_POINTS) d.labels.shift();
+  });
+  voltData.datasets[0].data.push(v);
+  if (voltData.datasets[0].data.length > MAX_POINTS) voltData.datasets[0].data.shift();
+  currData.datasets[0].data.push(i);
+  if (currData.datasets[0].data.length > MAX_POINTS) currData.datasets[0].data.shift();
+  voltChart.update('none');
+  currChart.update('none');
+}
+
+/* ── LCD ───────────────────────────────────────────────────────── */
+function setLCD(row0, row1) {
+  document.getElementById('lcdRow0').textContent = row0.padEnd(16, ' ').substring(0, 16);
+  document.getElementById('lcdRow1').textContent = row1.padEnd(16, ' ').substring(0, 16);
+}
+
+/* ── Fault / Alarm ─────────────────────────────────────────────── */
+function triggerFault(tripc, tripT) {
+  if (isFault) return;
+  isFault     = true;
+  tripCurrent = tripc;
+  tripTimestamp = new Date();
+
+  // Update trip card
+  document.getElementById('tripVal').innerHTML = `${tripc.toFixed(3)}<span class="unit">A</span>`;
+  document.getElementById('tripSub').textContent = `Tripped at ${tripTimestamp.toLocaleTimeString()}`;
+  document.getElementById('tripCard').style.borderColor = 'var(--danger)';
+
+  // Alarm banner
+  const banner = document.getElementById('alarmBanner');
+  banner.classList.add('active');
+  document.getElementById('alarmIcon').textContent = '🔴';
+  document.getElementById('alarmTitle').className = 'alarm-title fault';
+  document.getElementById('alarmTitle').textContent = '⚠ EARTH LEAKAGE DETECTED!';
+  document.getElementById('alarmDetail').textContent =
+    `Trip at ${tripTimestamp.toLocaleTimeString()} — Trip Current: ${tripc.toFixed(3)} A — Relay OPEN (Load disconnected)`;
+
+  // Enable reset button with danger style
+  const btn = document.getElementById('resetBtn');
+  btn.classList.add('danger');
+  btn.disabled = false;
+
+  // LCD
+  setLCD('EARTH LEAKAGE!  ', `I=${tripc.toFixed(3)}A TRIP`);
+
+  // Charts — mark fault point in red
+  markFaultOnChart();
+
+  // Log
+  addLog('fault', `EARTH LEAKAGE TRIPPED — I=${tripc.toFixed(3)}A at ${tripTimestamp.toLocaleTimeString()}`);
+
+  // Beep alarm
+  startAlarm();
+  document.getElementById('systemStatus').textContent = '⚠ FAULT — Relay OPEN';
+  setSerialStatus(serialConnected, true);
+}
+
+function clearFault() {
+  isFault = false;
+  resetTimestamp = new Date();
+
+  const banner = document.getElementById('alarmBanner');
+  banner.classList.remove('active');
+  document.getElementById('alarmIcon').textContent = '🟢';
+  document.getElementById('alarmTitle').className = 'alarm-title ok';
+  document.getElementById('alarmTitle').textContent = 'SYSTEM RESTORED';
+  document.getElementById('alarmDetail').textContent =
+    `Restored at ${resetTimestamp.toLocaleTimeString()}. ` +
+    (tripTimestamp
+      ? `Fault duration: ${Math.round((resetTimestamp - tripTimestamp) / 1000)}s. Trip I: ${tripCurrent.toFixed(3)} A`
+      : 'No prior trip recorded.');
+
+  const btn = document.getElementById('resetBtn');
+  btn.classList.remove('danger');
+  btn.disabled = false;
+
+  document.getElementById('tripCard').style.borderColor = '';
+  setLCD('  RESET OK      ', '  System Normal ');
+  stopAlarm();
+  addLog('ok', `System reset at ${resetTimestamp.toLocaleTimeString()} — fault duration ${tripTimestamp ? Math.round((resetTimestamp-tripTimestamp)/1000)+'s' : 'unknown'}`);
+  document.getElementById('systemStatus').textContent = 'Relay ON — Load Powered';
+  setSerialStatus(serialConnected, false);
+}
+
+function markFaultOnChart() {
+  // Add a vertical red annotation as a NaN gap
+  const label = nowStr();
+  voltData.labels.push(label);
+  currData.labels.push(label);
+  voltData.datasets[0].data.push(null);
+  currData.datasets[0].data.push(null);
+  voltChart.update('none');
+  currChart.update('none');
+}
+
+/* ── Alarm Audio ───────────────────────────────────────────────── */
+function startAlarm() {
+  stopAlarm();
+  let on = true;
+  alarmInterval = setInterval(() => {
+    beep(on ? 880 : 660, 120);
+    on = !on;
+  }, 250);
+}
+function stopAlarm() {
+  clearInterval(alarmInterval);
+  alarmInterval = null;
+}
+function beep(freq, dur) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const osc  = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(.18, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(.001, audioCtx.currentTime + dur / 1000);
+  osc.start(); osc.stop(audioCtx.currentTime + dur / 1000);
+}
+
+/* ── Reset ─────────────────────────────────────────────────────── */
+async function sendReset() {
+  document.getElementById('resetBtn').disabled = true;
+  try {
+    const r = await fetch('/api/reset', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      addLog('info', 'Reset command sent to Arduino via serial');
+      setTimeout(clearFault, 800);   // give Arduino time to respond
+    } else {
+      addLog('fault', 'Reset failed: ' + (j.error || 'Unknown'));
+      document.getElementById('resetBtn').disabled = false;
+    }
+  } catch(e) {
+    addLog('fault', 'Reset HTTP error: ' + e.message);
+    document.getElementById('resetBtn').disabled = false;
+  }
+}
+
+/* ── Serial Status ─────────────────────────────────────────────── */
+function setSerialStatus(connected, fault = false) {
+  serialConnected = connected;
+  const pill  = document.getElementById('serialStatus');
+  const label = document.getElementById('serialLabel');
+  pill.className = 'status-pill' + (fault ? ' fault' : connected ? ' connected' : '');
+  label.textContent = fault ? 'FAULT' : connected ? 'Connected' : 'Disconnected';
+}
+
+/* ── Event Log ─────────────────────────────────────────────────── */
+function addLog(type, message) {
+  const list  = document.getElementById('logList');
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML = `<span class="ts">${nowStr()}</span><span class="evt">${message}</span>`;
+  list.prepend(entry);
+  // Limit to 100 entries
+  while (list.children.length > 100) list.removeChild(list.lastChild);
+}
+
+/* ── GitHub ────────────────────────────────────────────────────── */
+function updateGithub() {
+  const val = document.getElementById('githubInput').value.trim();
+  if (!val) return;
+  document.getElementById('githubLink').href = val;
+  const user = val.replace('https://github.com/', '').split('/')[0];
+  document.getElementById('githubUser').textContent = val.replace('https://', '');
+  localStorage.setItem('elcb_github', val);
+  addLog('info', 'GitHub link updated: ' + val);
+}
+
+/* ── Clock / Uptime ────────────────────────────────────────────── */
+function tickClock() {
+  const now = new Date();
+  document.getElementById('clockDisplay').textContent = now.toLocaleTimeString();
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const h = String(Math.floor(elapsed / 3600)).padStart(2,'0');
+  const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2,'0');
+  const s = String(elapsed % 60).padStart(2,'0');
+  document.getElementById('uptimeVal').textContent = `${h}:${m}:${s}`;
+}
+setInterval(tickClock, 1000);
+
+function nowStr() {
+  return new Date().toLocaleTimeString('en-GB', { hour12: false });
+}
+
+/* ── Init ───────────────────────────────────────────────────────── */
+window.onload = () => {
+  // Restore saved GitHub link
+  const savedGh = localStorage.getItem('elcb_github');
+  if (savedGh) {
+    document.getElementById('githubInput').value = savedGh;
+    document.getElementById('githubLink').href = savedGh;
+    document.getElementById('githubUser').textContent = savedGh.replace('https://', '');
+  }
+  addLog('info', 'Dashboard initialised — connecting to server...');
+  connectWS();
+};
+
+// Intercept AudioContext on first interaction (browser policy)
+document.addEventListener('click', () => {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: true });
+</script>
+</body>
+</html>
