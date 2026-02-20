@@ -1,0 +1,220 @@
+# Smart ELCB Dashboard — VS Code Setup & Implementation Guide
+
+## Project Structure
+
+```
+smart_elcb/
+├── arduino/
+│   └── smart_elcb.ino          ← Upload this to Arduino Uno
+├── server/
+│   ├── package.json
+│   └── server.js               ← Node.js bridge (Serial ↔ WebSocket)
+└── public/
+    └── index.html              ← Web Dashboard (served by Node)
+```
+
+---
+
+## Step 1 — Install Prerequisites
+
+### 1.1 Install Node.js
+Download and install **Node.js v18 LTS** (or newer) from https://nodejs.org
+
+Verify installation:
+```bash
+node --version    # should print v18.x.x or higher
+npm --version
+```
+
+### 1.2 Install VS Code Extensions (optional but recommended)
+- **Arduino** by Microsoft (for editing `.ino` files)
+- **REST Client** by Huachao Mao (for testing `/api/reset`)
+- **ESLint** (for JavaScript linting)
+
+---
+
+## Step 2 — Upload Arduino Code
+
+1. Open **Arduino IDE** (or use the VS Code Arduino extension).
+2. Open `arduino/smart_elcb.ino`.
+3. Install required library: **LiquidCrystal I2C** by Frank de Brabander
+   - Tools → Manage Libraries → search `LiquidCrystal I2C` → Install
+4. Select board: `Arduino Uno`
+5. Select the correct **COM port** — note this port name (e.g. `COM3` on Windows, `/dev/ttyACM0` on Linux).
+6. Click **Upload**.
+7. Open Serial Monitor, set baud to **9600**. You should see JSON lines like:
+   ```json
+   {"type":"data","voltage":10.54,"current":0.123,"fault":false,"tripCurrent":0,"tripTime":0}
+   ```
+8. **Close** the Serial Monitor — Node.js needs exclusive access to the port.
+
+---
+
+## Step 3 — Configure the Serial Port in `server.js`
+
+Open `server/server.js` and find line ~17:
+
+```js
+const SERIAL_PORT = process.env.SERIAL_PORT || 'COM3';
+```
+
+**Change `'COM3'`** to match your Arduino's port:
+
+| OS      | Example value              |
+|---------|---------------------------|
+| Windows | `'COM3'` or `'COM5'`      |
+| macOS   | `'/dev/cu.usbmodem14101'` |
+| Linux   | `'/dev/ttyUSB0'` or `'/dev/ttyACM0'` |
+
+To find your port:
+- **Windows**: Device Manager → Ports (COM & LPT)
+- **macOS/Linux**: `ls /dev/cu.*` or `ls /dev/tty*`
+
+Or run the helper endpoint (after starting the server):
+```
+GET http://localhost:3000/api/ports
+```
+
+---
+
+## Step 4 — Install Node Dependencies & Start the Server
+
+Open a terminal in VS Code (`Ctrl + ~`) and run:
+
+```bash
+# Navigate to the server folder
+cd server
+
+# Install dependencies (express, serialport, ws)
+npm install
+
+# Start the server
+node server.js
+```
+
+You should see:
+```
+🚀  Dashboard: http://localhost:3000
+🔌  Connecting to serial port COM3...
+✅  Serial connected: COM3 @ 9600
+```
+
+If you see a serial port error, double-check Step 3 and make sure the Arduino IDE Serial Monitor is **closed**.
+
+---
+
+## Step 5 — Open the Dashboard
+
+Open your browser and go to:
+```
+http://localhost:3000
+```
+
+The dashboard will:
+- Connect via WebSocket automatically
+- Show "Connected" in the top-right status pill
+- Begin displaying live Voltage and Current readings
+- Update charts every ~500 ms
+
+---
+
+## Step 6 — Test the Fault Simulation
+
+1. Press the **push button** wired to Pin 2 on your Arduino.
+2. The relay will cut power (trips OFF).
+3. On the dashboard:
+   - The **alarm banner** turns red and flashes
+   - An **audio alarm** beeps (click anywhere first to unlock audio)
+   - The **Trip Current** card updates
+   - The event log records the fault time and trip current
+   - The LCD replica shows `EARTH LEAKAGE!`
+
+---
+
+## Step 7 — Reset the System
+
+**From the dashboard:** Click the **⟳ Reset System** button.
+- Sends an `'R'` byte over serial to the Arduino
+- Arduino re-calibrates and re-energises the relay
+- Dashboard updates to "SYSTEM RESTORED" with fault duration logged
+
+**Physical reset:** Press the Arduino hardware reset button — the web dashboard will detect the reconnection automatically.
+
+---
+
+## Step 8 — Set Your GitHub Link
+
+In the **Project Repository** panel on the dashboard:
+1. Paste your GitHub repo URL in the text box, e.g.:
+   ```
+   https://github.com/YOUR_USERNAME/smart-elcb
+   ```
+2. Click **UPDATE LINK**
+3. The link is saved in `localStorage` and persists across page refreshes
+
+---
+
+## Environment Variable (Optional)
+
+You can set the serial port without editing the file:
+
+```bash
+# Windows (PowerShell)
+$env:SERIAL_PORT="COM5"; node server.js
+
+# macOS/Linux
+SERIAL_PORT=/dev/ttyACM0 node server.js
+```
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `Error: Access denied (port is busy)` | Close Arduino IDE Serial Monitor |
+| `Error: No such file or device` | Wrong port in `server.js` — check Step 3 |
+| Dashboard shows "Disconnected" | Check Node server is running; refresh browser |
+| No audio on fault | Click anywhere on the page first (browser audio policy) |
+| Voltage reading is wrong | Verify `VOLTAGE_MULT` constant matches your R1/R2 ratio |
+| Current drifts near 0 | Normal — ACS712 has ~±30 mA noise floor; use averaging |
+
+---
+
+## How the Reset Flow Works
+
+```
+Browser click "Reset"
+      │
+      ▼
+POST /api/reset  (HTTP)
+      │
+      ▼
+Node.js server
+      │  writes 'R' byte
+      ▼
+Arduino Serial RX
+      │  clears faultState, re-calibrates vzero
+      │  digitalWrite(RELAY, ON)
+      ▼
+Arduino sends {"type":"reset","status":"ok"}
+      │
+      ▼
+Node.js WebSocket broadcast
+      │
+      ▼
+Browser clears alarm, updates LCD, logs restore time
+```
+
+---
+
+## Serial JSON Protocol Reference
+
+| Message type | Fields | Direction |
+|---|---|---|
+| `boot` | `status` | Arduino → Browser |
+| `data` | `voltage`, `current`, `fault`, `tripCurrent`, `tripTime` | Arduino → Browser |
+| `fault` | `tripCurrent`, `tripTime` | Arduino → Browser |
+| `reset` | `status` | Arduino → Browser |
+| `serial_status` | `connected`, `error?` | Server → Browser |
+| *(raw char)* | `'R'` | Browser → Arduino |
