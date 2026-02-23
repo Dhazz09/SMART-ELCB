@@ -187,7 +187,7 @@ Relay ON → Load Powered
 
 ---
 
-## 📷 Circuit Diagram
+## FLOW DIAGRAM
 
 <img width="8192" height="4022" alt="Arduino Power Management-2026-02-23-162112" src="https://github.com/user-attachments/assets/957d4408-418b-424d-989a-0b52db54dc54" />
 
