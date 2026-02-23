@@ -189,9 +189,7 @@ Relay ON → Load Powered
 
 ## 📷 Circuit Diagram
 
-> A circuit diagram image (`circuit_diagram.png`) can be placed in the `/docs` folder and linked here.
-> 
-> Recommended tool: [Fritzing](https://fritzing.org/) or [Tinkercad Circuits](https://www.tinkercad.com/)
+<img width="8192" height="4022" alt="Arduino Power Management-2026-02-23-162112" src="https://github.com/user-attachments/assets/957d4408-418b-424d-989a-0b52db54dc54" />
 
 ---
 
